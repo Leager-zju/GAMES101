@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.10)
 project(Rasterizer)
 
-set(Eigen3_DIR "D:/MSYS2/MSYS2/usr/include/eigen3/share/eigen3/cmake")
+set(Eigen3_DIR "D:/MSYS2/MSYS2/usr/include/eigen3")
 find_package(Eigen3 REQUIRED)
 if(NOT Eigen3_FOUND)
     message(FATAL_ERROR "Eigen3 Not Found!")
 endif(NOT Eigen3_FOUND)
 message(STATUS "Eigen3 library status:")
-message(STATUS "  version: ${Eigen3}")
-message(STATUS "  libraries: ${Eigen3}")
+message(STATUS "  version: ${Eigen3_VERSION}")
+message(STATUS "  libraries: ${Eigen3_LIBS}")
 message(STATUS "  include path: ${Eigen3_INCLUDE_DIRS}")
 include_directories("D:/MSYS2/MSYS2/usr/include/eigen3/include")
 
@@ -27,6 +27,8 @@ set(
     CMAKE_CXX_FLAGS
     "${CMAKE_CXX_FLAGS} -std=c++17 ${OpenCV_CXX_LAGS} -Wno-dev"
 )
+
+set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_SOURCE_DIR}/build/bin)
 
 file(GLOB_RECURSE SRCS "src/*.cpp" "src/*.hpp")
 add_executable(Rasterizer ${SRCS})
