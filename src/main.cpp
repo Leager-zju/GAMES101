@@ -6,42 +6,78 @@
 
 constexpr double MY_PI = 3.1415926;
 
+float angleToRadians(float angle) { return MY_PI*angle/180; }
+
 Eigen::Matrix4f get_view_matrix(Eigen::Vector3f eye_pos)
 {
     Eigen::Matrix4f view = Eigen::Matrix4f::Identity();
 
     Eigen::Matrix4f translate;
-    translate << 1, 0, 0, -eye_pos[0], 0, 1, 0, -eye_pos[1], 0, 0, 1,
-        -eye_pos[2], 0, 0, 0, 1;
+    translate << 1, 0, 0, -eye_pos[0],
+                 0, 1, 0, -eye_pos[1],
+                 0, 0, 1, -eye_pos[2],
+                 0, 0, 0, 1;
 
     view = translate * view;
 
     return view;
 }
 
+// Create the model matrix for rotating the triangle around the Z axis.
+// Then return it.
 Eigen::Matrix4f get_model_matrix(float rotation_angle)
 {
-    Eigen::Matrix4f model = Eigen::Matrix4f::Identity();
-
-    // TODO: Implement this function
-    // Create the model matrix for rotating the triangle around the Z axis.
-    // Then return it.
-
-    return model;
+    // transform angle to radians
+    float cosValue = cos(angleToRadians(rotation_angle));
+    float sinValue = sin(angleToRadians(rotation_angle));
+    Eigen::Matrix4f rotate;
+    rotate << cosValue, -sinValue, 0, 0,
+              sinValue, cosValue,  0, 0,
+              0,        0,         1, 0,
+              0,        0,         0, 1;
+    return rotate;
 }
 
+// Create the projection matrix for the given parameters.
+// Then return it.
 Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio,
                                       float zNear, float zFar)
 {
-    // Students will implement this function
+    // eye_fov: viewing angle in the range of [-eye_fov, eye_fov]
+    // aspect_ratio: the height:width of viewing plane
+    Eigen::Matrix4f squish;
+    Eigen::Matrix4f scale;
 
-    Eigen::Matrix4f projection = Eigen::Matrix4f::Identity();
+    squish << zNear, 0,     0,          0,
+              0,     zNear, 0,          0,
+              0,     0,     zNear+zFar, -zNear*zFar,
+              0,     0,     1,          0;
+    
+    float top = zNear*tan(angleToRadians(eye_fov));
+    float bottom = -top;
 
-    // TODO: Implement this function
-    // Create the projection matrix for the given parameters.
-    // Then return it.
+    float left = top*aspect_ratio;
+    float right = -left;
 
-    return projection;
+    scale << 2/(right-left), 0,              0,              0,
+             0,              2/(top-bottom), 0,              0,
+             0,              0,              2/(zFar-zNear), 0,
+             0,              0,              0,              1;
+    return scale*squish;
+}
+
+Eigen::Matrix4f get_rotation(Vector3f axis, float angle)
+{
+    Eigen::Matrix4f K = Eigen::Matrix4f::Identity();
+    float sinValue = sin(angleToRadians(angle));
+    float cosValue = cos(angleToRadians(angle));
+    float kx = axis[0];
+    float ky = axis[1];
+    float kz = axis[2];
+    K << 0,   -kz, ky,
+         kz,  0,   -kx,
+         -ky, kx, 0;
+    return Eigen::Matrix4f::Identity() + sinValue*K + (1-cosValue)*K*K;
 }
 
 int main(int argc, const char** argv)
@@ -111,6 +147,12 @@ int main(int argc, const char** argv)
         }
         else if (key == 'd') {
             angle -= 10;
+        }
+        else if (key == 'w') {
+            eye_pos[2] -= 1;
+        }
+        else if (key == 's') {
+            eye_pos[2] += 1;
         }
     }
 
