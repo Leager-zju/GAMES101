@@ -67,7 +67,7 @@ Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio,
 
     scale << 2/(right-left), 0,              0,              0,
              0,              2/(top-bottom), 0,              0,
-             0,              0,              2/(zFar-zNear), 0,
+             0,              0,              2/(zNear-zFar), 0,
              0,              0,              0,              1;
     return scale*translation*squish;
 }
