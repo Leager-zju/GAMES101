@@ -40,7 +40,7 @@ auto to_vec4(const Eigen::Vector3f& v3, float w = 1.0f)
 }
 
 static std::tuple<float, float, float> computeBarycentric2D(float x, float y, const Vector3f* v);
-static bool insideTriangle(int x, int y, const Vector3f* _v)
+static bool insideTriangle(float x, float y, const Vector3f* _v)
 {   
     auto [alpha, beta, gamma] = computeBarycentric2D(x, y, _v);
     return alpha >= 0 && beta >= 0 && gamma >= 0;
@@ -107,36 +107,56 @@ void rst::rasterizer::draw(pos_buf_id pos_buffer, ind_buf_id ind_buffer, col_buf
 void rst::rasterizer::rasterize_triangle(const Triangle& t) {
     auto v = t.toVector4();
 
-    float min_x = v[0].x();
-    float min_y = v[0].y();
-    float max_x = v[0].x();
-    float max_y = v[0].y();
+    float min_x = width-1;
+    float min_y = height-1;
+    float max_x = 0;
+    float max_y = 0;
 
-    for (int i = 1; i <= 2; i++) {
-        min_x = std::min(min_x, v[i].x());
-        min_y = std::min(min_y, v[i].y());
+    for (int i = 0; i <= 2; i++) {
+        min_x = std::min(min_x, floor(v[i].x()));
+        min_y = std::min(min_y, floor(v[i].y()));
 
-        max_x = std::max(max_x, v[i].x());
-        max_y = std::max(max_y, v[i].y());
+        max_x = std::max(max_x, ceil(v[i].x()));
+        max_y = std::max(max_y, ceil(v[i].y()));
     }
-    min_x = floor(min_x);
-    min_y = floor(min_y);
-    max_x = ceil(max_x);
-    max_y = ceil(max_y);
+
+    if (min_x < 0) min_x = 0;
+    if (min_y < 0) min_y = 0;
+    if (max_x >= width) max_x = width-1;
+    if (max_y >= height) max_y = height-1;
+
+    const int sample_count = msaa*msaa;
 
     for (int x = min_x; x <= max_x; x++) {
         for (int y = min_y; y <= max_y; y++) {
-            if (!insideTriangle(x, y, t.v)) continue;
-
-            auto[alpha, beta, gamma] = computeBarycentric2D(x, y, t.v);
-            float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
-            float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
-            z_interpolated *= w_reciprocal;
-
             int pixel_index = get_index(x, y);
-            if (isinf(depth_buf[pixel_index])  || z_interpolated > depth_buf[pixel_index]) {
-                depth_buf[pixel_index] = z_interpolated;
-                set_pixel({x, y, 0}, t.getColor());
+            int count = 0;
+            for (int i = 0; i < sample_count; i++) {
+                float samplePointWidth = 1.0/msaa;
+                int col = i%msaa;
+                int row = i/msaa;
+                float sampleX = x + col*samplePointWidth + samplePointWidth/2;
+                float sampleY = y + row*samplePointWidth + samplePointWidth/2;
+
+                if (!insideTriangle(sampleX, sampleY, t.v)) continue;
+
+                auto[alpha, beta, gamma] = computeBarycentric2D(sampleY, sampleY, t.v);
+                float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+                float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+                z_interpolated *= w_reciprocal;
+
+                if (isinf(sample_depth_buf[pixel_index][i])  || z_interpolated > sample_depth_buf[pixel_index][i]) {
+                    sample_depth_buf[pixel_index][i] = z_interpolated;
+                    sample_color_buf[pixel_index][i] = t.getColor();
+                    count++;
+                }
+            }
+            if (count) {
+                Vector3f res = {0.0, 0.0, 0.0};
+                for (auto&& color : sample_color_buf[pixel_index]) {
+                    res += color;
+                }
+                set_pixel({x, y, 0}, res/(sample_count));
             }
         }
     }
@@ -162,17 +182,29 @@ void rst::rasterizer::clear(rst::Buffers buff)
     if ((buff & rst::Buffers::Color) == rst::Buffers::Color)
     {
         std::fill(frame_buf.begin(), frame_buf.end(), Eigen::Vector3f{0, 0, 0});
+        for (auto&& cb : sample_color_buf) {
+            std::fill(cb.begin(), cb.end(), Eigen::Vector3f{0, 0, 0});
+        }
     }
     if ((buff & rst::Buffers::Depth) == rst::Buffers::Depth)
     {
-        std::fill(depth_buf.begin(), depth_buf.end(), std::numeric_limits<float>::infinity());
+        for (auto&& db : sample_depth_buf) {
+            std::fill(db.begin(), db.end(), std::numeric_limits<float>::infinity());
+        }
     }
 }
 
-rst::rasterizer::rasterizer(int w, int h) : width(w), height(h)
+rst::rasterizer::rasterizer(int w, int h) : width(w), height(h), msaa(2)
 {
     frame_buf.resize(w * h);
-    depth_buf.resize(w * h);
+    sample_depth_buf.resize(w * h);
+    for (auto&& db : sample_depth_buf) {
+        db.resize(msaa*msaa);
+    }
+    sample_color_buf.resize(w * h);
+    for (auto&& cb : sample_color_buf) {
+        cb.resize(msaa*msaa);
+    }
 }
 
 int rst::rasterizer::get_index(int x, int y)
