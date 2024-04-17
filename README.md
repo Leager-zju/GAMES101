@@ -77,4 +77,4 @@ std::vector<std::vector<float>> sample_depth_buf;
 
 （如果不实现 MSAA）判断一个点是否在三角形内，不能直接用像素坐标——对应了像素的左下角那个点，而不是像素中心。正确的做法是传参给 `insideTriangle()` 时 `x` 和 `y` 各加上 `0.5`。并且 `insideTriangle()` 的参数类型应从 `int` 改为 `float`。
 
-（如果实现 MSAA）一个采样点对应一个小方块，其边长为 $1/\sqrt{#MSAA}$，所以采样点中心应该要加上边长的一半。
+（如果实现 MSAA）一个采样点对应一个小方块，其边长为 $1/\sqrt{\#(\text{MSAA})}$，所以采样点中心应该要加上边长的一半。
