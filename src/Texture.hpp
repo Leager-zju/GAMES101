@@ -58,7 +58,6 @@ public:
         auto u1 = u01 + t * (u11 - u01);
 
         auto color = u0 + t * (u1 - u0);
-        std::cout << "[" << u_img << ", " << v_img << "]" << ", " << "[" << s << ", " << t << "]\n";
         return Eigen::Vector3f(color[0], color[1], color[2]);
     }
 
