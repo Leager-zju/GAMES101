@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(Rasterizer)
+project(BezierCurve)
 
 set(Eigen3_DIR "D:/MSYS2/MSYS2/usr/include/eigen3") # change to your/path/to/eigen3
 find_package(Eigen3 REQUIRED)
@@ -17,5 +17,5 @@ set(
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_CURRENT_SOURCE_DIR}/build/bin)
 
 file(GLOB_RECURSE SRCS "src/*.cpp" "src/*.hpp")
-add_executable(Rasterizer ${SRCS})
-target_link_libraries(Rasterizer ${OpenCV_LIBRARIES})
+add_executable(BezierCurve ${SRCS})
+target_link_libraries(BezierCurve ${OpenCV_LIBRARIES})
