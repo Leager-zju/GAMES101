@@ -4,14 +4,35 @@
 
 #include <cstring>
 
+inline float Determinant(const Vector3f& a, const Vector3f& b, const Vector3f& c) {
+    // det([a, b, c]) = a · (b × c) = b · (c × a) = c · (a × b)
+    return dotProduct(a, crossProduct(b, c));
+}
+
 bool rayTriangleIntersect(const Vector3f& v0, const Vector3f& v1, const Vector3f& v2, const Vector3f& orig,
                           const Vector3f& dir, float& tnear, float& u, float& v)
 {
-    // TODO: Implement this function that tests whether the triangle
-    // that's specified bt v0, v1 and v2 intersects with the ray (whose
-    // origin is *orig* and direction is *dir*)
-    // Also don't forget to update tnear, u and v.
-    return false;
+    // o + t * d = (1-alpha-beta) * v0 + alpha * v1 + beta * v2
+    // t * (-d) + alpha * (v1 - v0) + beta * (v2 - v0) = o - v0
+    // [-d, v1-v0, v2-v0] * [t, alpha, beta]^T = o-v0
+    Vector3f X = -dir;
+    Vector3f Y = v1-v0;
+    Vector3f Z = v2-v0;
+    Vector3f W = orig-v0;
+
+    // Cramer's rule
+    float detA = Determinant(X, Y, Z);
+    float t = Determinant(W, Y, Z)/detA;
+    float alpha = Determinant(X, W, Z)/detA;
+    float beta = Determinant(X, Y, W)/detA;
+    if (t <= 0.f || alpha < 0.f || beta < 0.f || 1-alpha-beta < 0.f) {
+        return false;
+    }
+
+    tnear = t;
+    u = alpha;
+    v = beta;
+    return true;
 }
 
 class MeshTriangle : public Object
