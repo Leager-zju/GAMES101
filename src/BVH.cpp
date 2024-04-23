@@ -31,7 +31,7 @@ BVHBuildNode* BVHAccel::recursiveBuild(std::vector<Object*> objects)
 
     // Compute bounds of all primitives in BVH node
     Bounds3 bounds;
-    for (int i = 0; i < objects.size(); ++i)
+    for (size_t i = 0; i < objects.size(); ++i)
         bounds = Union(bounds, objects[i]->getBounds());
     if (objects.size() == 1) {
         // Create leaf _BVHBuildNode_
@@ -50,7 +50,7 @@ BVHBuildNode* BVHAccel::recursiveBuild(std::vector<Object*> objects)
     }
     else {
         Bounds3 centroidBounds;
-        for (int i = 0; i < objects.size(); ++i)
+        for (size_t i = 0; i < objects.size(); ++i)
             centroidBounds =
                 Union(centroidBounds, objects[i]->getBounds().Centroid());
         int dim = centroidBounds.maxExtent();
@@ -75,8 +75,35 @@ BVHBuildNode* BVHAccel::recursiveBuild(std::vector<Object*> objects)
             break;
         }
 
+        size_t n = objects.size();
+        size_t pivot = n/2;
+        if (splitMethod == SplitMethod::SAH) {
+            size_t nBuckets = 10;
+
+            pivot = 1;
+            double minCost = kInfinity;
+            for (size_t i = 1; i <= nBuckets; i++) {
+                Bounds3 left;
+                Bounds3 right;
+                size_t p = i*nBuckets;
+                for (size_t j = 0; j < p; j++) {
+                    left = Union(left, objects[j]->getBounds().Centroid());
+                }
+                for (size_t j = p; j < n; j++) {
+                    right = Union(right, objects[j]->getBounds().Centroid());
+                }
+                double SLeft = left.SurfaceArea();
+                double SRight = right.SurfaceArea();
+                double cost = SLeft * i + SRight * (n - i);
+                if (cost < minCost) {
+                    minCost = cost;
+                    pivot = i;
+                }
+            }
+        }
+
         auto beginning = objects.begin();
-        auto middling = objects.begin() + (objects.size() / 2);
+        auto middling = objects.begin() + pivot;
         auto ending = objects.end();
 
         auto leftshapes = std::vector<Object*>(beginning, middling);
@@ -104,6 +131,24 @@ Intersection BVHAccel::Intersect(const Ray& ray) const
 
 Intersection BVHAccel::getIntersection(BVHBuildNode* node, const Ray& ray) const
 {
-    // TODO Traverse the BVH to find intersection
+    if (node->bounds.IntersectP(
+            ray, ray.direction_inv,
+            {ray.direction.x < 0, ray.direction.y < 0, ray.direction.z < 0})) {
+        if (!node->left && !node->right) {
+            return node->object->getIntersection(ray);
+        }
 
+        Intersection left  = getIntersection(node->left, ray);
+        Intersection right  = getIntersection(node->right, ray);
+        if (left.happened && right.happened) {
+            return left.distance < right.distance ? left : right;
+        }
+        if (left.happened) {
+            return left;
+        }
+        if (right.happened) {
+            return right;
+        }
+    }
+    return {};
 }

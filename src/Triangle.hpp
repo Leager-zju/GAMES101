@@ -9,33 +9,35 @@
 #include <cassert>
 #include <array>
 
+inline float Determinant(const Vector3f& a, const Vector3f& b, const Vector3f& c) {
+    // det([a, b, c]) = a · (b × c) = b · (c × a) = c · (a × b)
+    return dotProduct(a, crossProduct(b, c));
+}
+
 bool rayTriangleIntersect(const Vector3f& v0, const Vector3f& v1,
                           const Vector3f& v2, const Vector3f& orig,
                           const Vector3f& dir, float& tnear, float& u, float& v)
 {
-    Vector3f edge1 = v1 - v0;
-    Vector3f edge2 = v2 - v0;
-    Vector3f pvec = crossProduct(dir, edge2);
-    float det = dotProduct(edge1, pvec);
-    if (det == 0 || det < 0)
+    // o + t * d = (1-alpha-beta) * v0 + alpha * v1 + beta * v2
+    // t * (-d) + alpha * (v1 - v0) + beta * (v2 - v0) = o - v0
+    // [-d, v1-v0, v2-v0] * [t, alpha, beta]^T = o-v0
+    Vector3f X = -dir;
+    Vector3f Y = v1-v0;
+    Vector3f Z = v2-v0;
+    Vector3f W = orig-v0;
+
+    // Cramer's rule
+    float detA = Determinant(X, Y, Z);
+    float t = Determinant(W, Y, Z)/detA;
+    float alpha = Determinant(X, W, Z)/detA;
+    float beta = Determinant(X, Y, W)/detA;
+    if (t <= 0.f || alpha < 0.f || beta < 0.f || 1-alpha-beta < 0.f) {
         return false;
+    }
 
-    Vector3f tvec = orig - v0;
-    u = dotProduct(tvec, pvec);
-    if (u < 0 || u > det)
-        return false;
-
-    Vector3f qvec = crossProduct(tvec, edge1);
-    v = dotProduct(dir, qvec);
-    if (v < 0 || u + v > det)
-        return false;
-
-    float invDet = 1 / det;
-
-    tnear = dotProduct(edge2, qvec) * invDet;
-    u *= invDet;
-    v *= invDet;
-
+    tnear = t;
+    u = alpha;
+    v = beta;
     return true;
 }
 
@@ -60,13 +62,11 @@ public:
     bool intersect(const Ray& ray, float& tnear,
                    uint32_t& index) const override;
     Intersection getIntersection(Ray ray) override;
-    void getSurfaceProperties(const Vector3f& P, const Vector3f& I,
-                              const uint32_t& index, const Vector2f& uv,
-                              Vector3f& N, Vector2f& st) const override
+    void getSurfaceProperties(const Vector3f&, const Vector3f&,
+                              const uint32_t&, const Vector2f&,
+                              Vector3f& N, Vector2f&) const override
     {
         N = normal;
-        //        throw std::runtime_error("triangle::getSurfaceProperties not
-        //        implemented.");
     }
     Vector3f evalDiffuseColor(const Vector2f&) const override;
     Bounds3 getBounds() override;
@@ -89,7 +89,7 @@ public:
         Vector3f max_vert = Vector3f{-std::numeric_limits<float>::infinity(),
                                      -std::numeric_limits<float>::infinity(),
                                      -std::numeric_limits<float>::infinity()};
-        for (int i = 0; i < mesh.Vertices.size(); i += 3) {
+        for (size_t i = 0; i < mesh.Vertices.size(); i += 3) {
             std::array<Vector3f, 3> face_vertices;
             for (int j = 0; j < 3; j++) {
                 auto vert = Vector3f(mesh.Vertices[i + j].Position.X,
@@ -126,7 +126,7 @@ public:
         bvh = new BVHAccel(ptrs);
     }
 
-    bool intersect(const Ray& ray) { return true; }
+    bool intersect(const Ray&) { return true; }
 
     bool intersect(const Ray& ray, float& tnear, uint32_t& index) const
     {
@@ -150,7 +150,7 @@ public:
 
     Bounds3 getBounds() { return bounding_box; }
 
-    void getSurfaceProperties(const Vector3f& P, const Vector3f& I,
+    void getSurfaceProperties(const Vector3f&, const Vector3f&,
                               const uint32_t& index, const Vector2f& uv,
                               Vector3f& N, Vector2f& st) const
     {
@@ -199,9 +199,9 @@ public:
     Material* m;
 };
 
-inline bool Triangle::intersect(const Ray& ray) { return true; }
-inline bool Triangle::intersect(const Ray& ray, float& tnear,
-                                uint32_t& index) const
+inline bool Triangle::intersect(const Ray&) { return true; }
+inline bool Triangle::intersect(const Ray&, float&,
+                                uint32_t&) const
 {
     return false;
 }
@@ -210,32 +210,37 @@ inline Bounds3 Triangle::getBounds() { return Union(Bounds3(v0, v1), v2); }
 
 inline Intersection Triangle::getIntersection(Ray ray)
 {
-    Intersection inter;
-
     if (dotProduct(ray.direction, normal) > 0)
-        return inter;
+        return {};
     double u, v, t_tmp = 0;
     Vector3f pvec = crossProduct(ray.direction, e2);
     double det = dotProduct(e1, pvec);
     if (fabs(det) < EPSILON)
-        return inter;
+        return {};
 
     double det_inv = 1. / det;
+
     Vector3f tvec = ray.origin - v0;
     u = dotProduct(tvec, pvec) * det_inv;
     if (u < 0 || u > 1)
-        return inter;
+        return {};
+
     Vector3f qvec = crossProduct(tvec, e1);
     v = dotProduct(ray.direction, qvec) * det_inv;
     if (v < 0 || u + v > 1)
-        return inter;
+        return {};
+
     t_tmp = dotProduct(e2, qvec) * det_inv;
+    if (t_tmp <= 0)
+        return {};
 
-    // TODO find ray triangle intersection
-
-
-
-
+    Intersection inter;
+    inter.happened = true;
+    inter.coords = ray.origin + t_tmp * ray.direction;
+    inter.normal = normal;
+    inter.distance = t_tmp;
+    inter.obj = this;
+    inter.m = this->m;
     return inter;
 }
 

@@ -16,7 +16,7 @@ public:
     float radius, radius2;
     Material *m;
     Sphere(const Vector3f &c, const float &r) : center(c), radius(r), radius2(r * r), m(new Material()) {}
-    bool intersect(const Ray& ray) {
+    bool intersect(const Ray& ray) override {
         // analytic solution
         Vector3f L = ray.origin - center;
         float a = dotProduct(ray.direction, ray.direction);
@@ -28,7 +28,7 @@ public:
         if (t0 < 0) return false;
         return true;
     }
-    bool intersect(const Ray& ray, float &tnear, uint32_t &index) const
+    bool intersect(const Ray& ray, float &tnear, uint32_t &) const override
     {
         // analytic solution
         Vector3f L = ray.origin - center;
@@ -44,7 +44,7 @@ public:
 
         return true;
     }
-    Intersection getIntersection(Ray ray){
+    Intersection getIntersection(Ray ray) override {
         Intersection result;
         result.happened = false;
         Vector3f L = ray.origin - center;
@@ -65,13 +65,13 @@ public:
         return result;
 
     }
-    void getSurfaceProperties(const Vector3f &P, const Vector3f &I, const uint32_t &index, const Vector2f &uv, Vector3f &N, Vector2f &st) const
+    void getSurfaceProperties(const Vector3f &P, const Vector3f &, const uint32_t &, const Vector2f &, Vector3f &N, Vector2f &) const override
     { N = normalize(P - center); }
 
-    Vector3f evalDiffuseColor(const Vector2f &st)const {
+    Vector3f evalDiffuseColor(const Vector2f &) const override {
         return m->getColor();
     }
-    Bounds3 getBounds(){
+    Bounds3 getBounds() override {
         return Bounds3(Vector3f(center.x-radius, center.y-radius, center.z-radius),
                        Vector3f(center.x+radius, center.y+radius, center.z+radius));
     }

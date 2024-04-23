@@ -17,16 +17,16 @@ Intersection Scene::intersect(const Ray &ray) const
 
 bool Scene::trace(
         const Ray &ray,
-        const std::vector<Object*> &objects,
+        const std::vector<Object*> &_objects,
         float &tNear, uint32_t &index, Object **hitObject)
 {
     *hitObject = nullptr;
-    for (uint32_t k = 0; k < objects.size(); ++k) {
+    for (uint32_t k = 0; k < _objects.size(); ++k) {
         float tNearK = kInfinity;
         uint32_t indexK;
         Vector2f uvK;
-        if (objects[k]->intersect(ray, tNearK, indexK) && tNearK < tNear) {
-            *hitObject = objects[k];
+        if (_objects[k]->intersect(ray, tNearK, indexK) && tNearK < tNear) {
+            *hitObject = _objects[k];
             tNear = tNearK;
             index = indexK;
         }
@@ -123,11 +123,8 @@ Vector3f Scene::castRay(const Ray &ray, int depth) const
                     {
                         Vector3f lightDir = get_lights()[i]->position - hitPoint;
                         // square of the distance between hitPoint and the light
-                        float lightDistance2 = dotProduct(lightDir, lightDir);
                         lightDir = normalize(lightDir);
                         float LdotN = std::max(0.f, dotProduct(lightDir, N));
-                        Object *shadowHitObject = nullptr;
-                        float tNearShadow = kInfinity;
                         // is the point in shadow, and is the nearest occluding object closer to the object than the light itself?
                         bool inShadow = bvh->Intersect(Ray(shadowPointOrig, lightDir)).happened;
                         lightAmt += (1 - inShadow) * get_lights()[i]->intensity * LdotN;

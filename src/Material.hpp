@@ -38,7 +38,7 @@ MaterialType Material::getType(){return m_type;}
 Vector3f Material::getColor(){return m_color;}
 Vector3f Material::getEmission() {return m_emission;}
 
-Vector3f Material::getColorAt(double u, double v) {
+Vector3f Material::getColorAt(double , double ) {
     return Vector3f();
 }
 #endif //RAYTRACING_MATERIAL_H
