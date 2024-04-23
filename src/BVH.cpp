@@ -31,7 +31,7 @@ BVHBuildNode* BVHAccel::recursiveBuild(std::vector<Object*> objects)
 
     // Compute bounds of all primitives in BVH node
     Bounds3 bounds;
-    for (size_t i = 0; i < objects.size(); ++i)
+    for (int i = 0; i < objects.size(); ++i)
         bounds = Union(bounds, objects[i]->getBounds());
     if (objects.size() == 1) {
         // Create leaf _BVHBuildNode_
@@ -39,6 +39,7 @@ BVHBuildNode* BVHAccel::recursiveBuild(std::vector<Object*> objects)
         node->object = objects[0];
         node->left = nullptr;
         node->right = nullptr;
+        node->area = objects[0]->getArea();
         return node;
     }
     else if (objects.size() == 2) {
@@ -46,11 +47,12 @@ BVHBuildNode* BVHAccel::recursiveBuild(std::vector<Object*> objects)
         node->right = recursiveBuild(std::vector{objects[1]});
 
         node->bounds = Union(node->left->bounds, node->right->bounds);
+        node->area = node->left->area + node->right->area;
         return node;
     }
     else {
         Bounds3 centroidBounds;
-        for (size_t i = 0; i < objects.size(); ++i)
+        for (int i = 0; i < objects.size(); ++i)
             centroidBounds =
                 Union(centroidBounds, objects[i]->getBounds().Centroid());
         int dim = centroidBounds.maxExtent();
@@ -75,35 +77,8 @@ BVHBuildNode* BVHAccel::recursiveBuild(std::vector<Object*> objects)
             break;
         }
 
-        size_t n = objects.size();
-        size_t pivot = n/2;
-        if (splitMethod == SplitMethod::SAH) {
-            size_t nBuckets = 10;
-
-            pivot = 1;
-            double minCost = kInfinity;
-            for (size_t i = 1; i <= nBuckets; i++) {
-                Bounds3 left;
-                Bounds3 right;
-                size_t p = i*nBuckets;
-                for (size_t j = 0; j < p; j++) {
-                    left = Union(left, objects[j]->getBounds().Centroid());
-                }
-                for (size_t j = p; j < n; j++) {
-                    right = Union(right, objects[j]->getBounds().Centroid());
-                }
-                double SLeft = left.SurfaceArea();
-                double SRight = right.SurfaceArea();
-                double cost = SLeft * i + SRight * (n - i);
-                if (cost < minCost) {
-                    minCost = cost;
-                    pivot = i;
-                }
-            }
-        }
-
         auto beginning = objects.begin();
-        auto middling = objects.begin() + pivot;
+        auto middling = objects.begin() + (objects.size() / 2);
         auto ending = objects.end();
 
         auto leftshapes = std::vector<Object*>(beginning, middling);
@@ -115,6 +90,7 @@ BVHBuildNode* BVHAccel::recursiveBuild(std::vector<Object*> objects)
         node->right = recursiveBuild(rightshapes);
 
         node->bounds = Union(node->left->bounds, node->right->bounds);
+        node->area = node->left->area + node->right->area;
     }
 
     return node;
@@ -131,24 +107,23 @@ Intersection BVHAccel::Intersect(const Ray& ray) const
 
 Intersection BVHAccel::getIntersection(BVHBuildNode* node, const Ray& ray) const
 {
-    if (node->bounds.IntersectP(
-            ray, ray.direction_inv,
-            {ray.direction.x < 0, ray.direction.y < 0, ray.direction.z < 0})) {
-        if (!node->left && !node->right) {
-            return node->object->getIntersection(ray);
-        }
+    // TODO Traverse the BVH to find intersection
 
-        Intersection left  = getIntersection(node->left, ray);
-        Intersection right  = getIntersection(node->right, ray);
-        if (left.happened && right.happened) {
-            return left.distance < right.distance ? left : right;
-        }
-        if (left.happened) {
-            return left;
-        }
-        if (right.happened) {
-            return right;
-        }
+}
+
+
+void BVHAccel::getSample(BVHBuildNode* node, float p, Intersection &pos, float &pdf){
+    if(node->left == nullptr || node->right == nullptr){
+        node->object->Sample(pos, pdf);
+        pdf *= node->area;
+        return;
     }
-    return {};
+    if(p < node->left->area) getSample(node->left, p, pos, pdf);
+    else getSample(node->right, p - node->left->area, pos, pdf);
+}
+
+void BVHAccel::Sample(Intersection &pos, float &pdf){
+    float p = std::sqrt(get_random_float()) * root->area;
+    getSample(root, p, pos, pdf);
+    pdf /= root->area;
 }

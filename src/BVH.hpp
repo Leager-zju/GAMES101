@@ -44,6 +44,9 @@ public:
     const int maxPrimsInNode;
     const SplitMethod splitMethod;
     std::vector<Object*> primitives;
+
+    void getSample(BVHBuildNode* node, float p, Intersection &pos, float &pdf);
+    void Sample(Intersection &pos, float &pdf);
 };
 
 struct BVHBuildNode {
@@ -51,6 +54,7 @@ struct BVHBuildNode {
     BVHBuildNode *left;
     BVHBuildNode *right;
     Object* object;
+    float area;
 
 public:
     int splitAxis=0, firstPrimOffset=0, nPrimitives=0;

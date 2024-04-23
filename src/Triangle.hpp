@@ -9,35 +9,33 @@
 #include <cassert>
 #include <array>
 
-inline float Determinant(const Vector3f& a, const Vector3f& b, const Vector3f& c) {
-    // det([a, b, c]) = a · (b × c) = b · (c × a) = c · (a × b)
-    return dotProduct(a, crossProduct(b, c));
-}
-
 bool rayTriangleIntersect(const Vector3f& v0, const Vector3f& v1,
                           const Vector3f& v2, const Vector3f& orig,
                           const Vector3f& dir, float& tnear, float& u, float& v)
 {
-    // o + t * d = (1-alpha-beta) * v0 + alpha * v1 + beta * v2
-    // t * (-d) + alpha * (v1 - v0) + beta * (v2 - v0) = o - v0
-    // [-d, v1-v0, v2-v0] * [t, alpha, beta]^T = o-v0
-    Vector3f X = -dir;
-    Vector3f Y = v1-v0;
-    Vector3f Z = v2-v0;
-    Vector3f W = orig-v0;
-
-    // Cramer's rule
-    float detA = Determinant(X, Y, Z);
-    float t = Determinant(W, Y, Z)/detA;
-    float alpha = Determinant(X, W, Z)/detA;
-    float beta = Determinant(X, Y, W)/detA;
-    if (t <= 0.f || alpha < 0.f || beta < 0.f || 1-alpha-beta < 0.f) {
+    Vector3f edge1 = v1 - v0;
+    Vector3f edge2 = v2 - v0;
+    Vector3f pvec = crossProduct(dir, edge2);
+    float det = dotProduct(edge1, pvec);
+    if (det == 0 || det < 0)
         return false;
-    }
 
-    tnear = t;
-    u = alpha;
-    v = beta;
+    Vector3f tvec = orig - v0;
+    u = dotProduct(tvec, pvec);
+    if (u < 0 || u > det)
+        return false;
+
+    Vector3f qvec = crossProduct(tvec, edge1);
+    v = dotProduct(dir, qvec);
+    if (v < 0 || u + v > det)
+        return false;
+
+    float invDet = 1 / det;
+
+    tnear = dotProduct(edge2, qvec) * invDet;
+    u *= invDet;
+    v *= invDet;
+
     return true;
 }
 
@@ -48,6 +46,7 @@ public:
     Vector3f e1, e2;     // 2 edges v1-v0, v2-v0;
     Vector3f t0, t1, t2; // texture coords
     Vector3f normal;
+    float area;
     Material* m;
 
     Triangle(Vector3f _v0, Vector3f _v1, Vector3f _v2, Material* _m = nullptr)
@@ -56,30 +55,46 @@ public:
         e1 = v1 - v0;
         e2 = v2 - v0;
         normal = normalize(crossProduct(e1, e2));
+        area = crossProduct(e1, e2).norm()*0.5f;
     }
 
     bool intersect(const Ray& ray) override;
     bool intersect(const Ray& ray, float& tnear,
                    uint32_t& index) const override;
     Intersection getIntersection(Ray ray) override;
-    void getSurfaceProperties(const Vector3f&, const Vector3f&,
-                              const uint32_t&, const Vector2f&,
-                              Vector3f& N, Vector2f&) const override
+    void getSurfaceProperties(const Vector3f& P, const Vector3f& I,
+                              const uint32_t& index, const Vector2f& uv,
+                              Vector3f& N, Vector2f& st) const override
     {
         N = normal;
+        //        throw std::runtime_error("triangle::getSurfaceProperties not
+        //        implemented.");
     }
     Vector3f evalDiffuseColor(const Vector2f&) const override;
     Bounds3 getBounds() override;
+    void Sample(Intersection &pos, float &pdf){
+        float x = std::sqrt(get_random_float()), y = get_random_float();
+        pos.coords = v0 * (1.0f - x) + v1 * (x * (1.0f - y)) + v2 * (x * y);
+        pos.normal = this->normal;
+        pdf = 1.0f / area;
+    }
+    float getArea(){
+        return area;
+    }
+    bool hasEmit(){
+        return m->hasEmission();
+    }
 };
 
 class MeshTriangle : public Object
 {
 public:
-    MeshTriangle(const std::string& filename)
+    MeshTriangle(const std::string& filename, Material *mt = new Material())
     {
         objl::Loader loader;
         loader.LoadFile(filename);
-
+        area = 0;
+        m = mt;
         assert(loader.LoadedMeshes.size() == 1);
         auto mesh = loader.LoadedMeshes[0];
 
@@ -89,13 +104,13 @@ public:
         Vector3f max_vert = Vector3f{-std::numeric_limits<float>::infinity(),
                                      -std::numeric_limits<float>::infinity(),
                                      -std::numeric_limits<float>::infinity()};
-        for (size_t i = 0; i < mesh.Vertices.size(); i += 3) {
+        for (int i = 0; i < mesh.Vertices.size(); i += 3) {
             std::array<Vector3f, 3> face_vertices;
+
             for (int j = 0; j < 3; j++) {
                 auto vert = Vector3f(mesh.Vertices[i + j].Position.X,
                                      mesh.Vertices[i + j].Position.Y,
-                                     mesh.Vertices[i + j].Position.Z) *
-                            60.f;
+                                     mesh.Vertices[i + j].Position.Z);
                 face_vertices[j] = vert;
 
                 min_vert = Vector3f(std::min(min_vert.x, vert.x),
@@ -106,27 +121,21 @@ public:
                                     std::max(max_vert.z, vert.z));
             }
 
-            auto new_mat =
-                new Material(MaterialType::DIFFUSE_AND_GLOSSY,
-                             Vector3f(0.5, 0.5, 0.5), Vector3f(0, 0, 0));
-            new_mat->Kd = 0.6;
-            new_mat->Ks = 0.0;
-            new_mat->specularExponent = 0;
-
             triangles.emplace_back(face_vertices[0], face_vertices[1],
-                                   face_vertices[2], new_mat);
+                                   face_vertices[2], mt);
         }
 
         bounding_box = Bounds3(min_vert, max_vert);
 
         std::vector<Object*> ptrs;
-        for (auto& tri : triangles)
+        for (auto& tri : triangles){
             ptrs.push_back(&tri);
-
+            area += tri.area;
+        }
         bvh = new BVHAccel(ptrs);
     }
 
-    bool intersect(const Ray&) { return true; }
+    bool intersect(const Ray& ray) { return true; }
 
     bool intersect(const Ray& ray, float& tnear, uint32_t& index) const
     {
@@ -150,7 +159,7 @@ public:
 
     Bounds3 getBounds() { return bounding_box; }
 
-    void getSurfaceProperties(const Vector3f&, const Vector3f&,
+    void getSurfaceProperties(const Vector3f& P, const Vector3f& I,
                               const uint32_t& index, const Vector2f& uv,
                               Vector3f& N, Vector2f& st) const
     {
@@ -185,6 +194,17 @@ public:
 
         return intersec;
     }
+    
+    void Sample(Intersection &pos, float &pdf){
+        bvh->Sample(pos, pdf);
+        pos.emit = m->getEmission();
+    }
+    float getArea(){
+        return area;
+    }
+    bool hasEmit(){
+        return m->hasEmission();
+    }
 
     Bounds3 bounding_box;
     std::unique_ptr<Vector3f[]> vertices;
@@ -195,13 +215,14 @@ public:
     std::vector<Triangle> triangles;
 
     BVHAccel* bvh;
+    float area;
 
     Material* m;
 };
 
-inline bool Triangle::intersect(const Ray&) { return true; }
-inline bool Triangle::intersect(const Ray&, float&,
-                                uint32_t&) const
+inline bool Triangle::intersect(const Ray& ray) { return true; }
+inline bool Triangle::intersect(const Ray& ray, float& tnear,
+                                uint32_t& index) const
 {
     return false;
 }
@@ -210,37 +231,29 @@ inline Bounds3 Triangle::getBounds() { return Union(Bounds3(v0, v1), v2); }
 
 inline Intersection Triangle::getIntersection(Ray ray)
 {
+    Intersection inter;
+
     if (dotProduct(ray.direction, normal) > 0)
-        return {};
+        return inter;
     double u, v, t_tmp = 0;
     Vector3f pvec = crossProduct(ray.direction, e2);
     double det = dotProduct(e1, pvec);
     if (fabs(det) < EPSILON)
-        return {};
+        return inter;
 
     double det_inv = 1. / det;
-
     Vector3f tvec = ray.origin - v0;
     u = dotProduct(tvec, pvec) * det_inv;
     if (u < 0 || u > 1)
-        return {};
-
+        return inter;
     Vector3f qvec = crossProduct(tvec, e1);
     v = dotProduct(ray.direction, qvec) * det_inv;
     if (v < 0 || u + v > 1)
-        return {};
-
+        return inter;
     t_tmp = dotProduct(e2, qvec) * det_inv;
-    if (t_tmp <= 0)
-        return {};
 
-    Intersection inter;
-    inter.happened = true;
-    inter.coords = ray.origin + t_tmp * ray.direction;
-    inter.normal = normal;
-    inter.distance = t_tmp;
-    inter.obj = this;
-    inter.m = this->m;
+    // TODO find ray triangle intersection
+
     return inter;
 }
 

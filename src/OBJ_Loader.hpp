@@ -729,7 +729,6 @@ namespace objl
             std::vector<std::string> sface, svert;
             Vertex vVert;
             algorithm::split(algorithm::tail(icurline), sface, " ");
-
             bool noNormal = false;
 
             // For every given vertex do this
