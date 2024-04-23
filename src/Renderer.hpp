@@ -1,6 +1,9 @@
-#pragma once
+//
+// Created by goksu on 2/25/20.
+//
 #include "Scene.hpp"
 
+#pragma once
 struct hit_payload
 {
     float tNear;
