@@ -5,6 +5,7 @@
 #ifndef RAYTRACING_MATERIAL_H
 #define RAYTRACING_MATERIAL_H
 
+#include "global.hpp"
 #include "Vector.hpp"
 
 enum MaterialType { DIFFUSE};
